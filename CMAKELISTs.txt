@@ -1,0 +1,22 @@
+cmake_minimum_required(VERSION 3.10)
+project(MyProject)
+
+# Set the C++ standard to C++20
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+# Set the compiler to clang++
+set(CMAKE_CXX_COMPILER /usr/bin/clang++)
+
+# Add the source files
+add_executable(Client Client.cpp) 
+add_executable(LoadBalancer LoadBalancer.cpp) 
+add_executable(MainServer MainServer.cpp) 
+add_executable(Worker_Server Worker_Server.cpp) 
+
+find_package(Boost REQUIRED) 
+# Link the sqlite3 and benchmark library
+target_link_libraries(Client Boost::asio)
+target_link_libraries(LoadBalancer Boost::asio)
+target_link_libraries(MainServer Boost::asio)
+target_link_libraries(Worker_Server Boost::asio)

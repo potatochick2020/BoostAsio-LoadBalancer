@@ -1,3 +1,7 @@
+# Disclaimer
+
+This is an on-ongoing project, the project is not completed yet. It is not even compilable at this moment, as I am working on other project currently.
+
 # BoostAsio-LoadBalancer
 This is a education project for myself to learn boost asio, google test, and google bench mark.
 
@@ -54,12 +58,10 @@ hashmap server port 8020 (for worker connect to hadhmap server)
 
 
 # To-Do
-- Implement a logger
-- use preprocessor to define the the port   
-    - loadbalancer port
-    - hashmap server mainserver port
-    - query server port 
-
+- restructure to OOP class
+    - port could be a private member variable of the class. 
+- Implement a logger 
+- 
 ## client.cpp
 - get the reply and print it 
 - validation on valid index

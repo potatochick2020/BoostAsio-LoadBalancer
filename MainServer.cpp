@@ -84,7 +84,7 @@ void query_connection(tcp::socket socket)
     while (true)
     {
         boost::asio::streambuf buffer;
-        size_t s = boost::asio::read_until(socket, buffer, "\r\n", ec);
+        size_t s = boost::asio::read_until(socket, buffer, "close", ec);
         if (!ec)
         {
             std::istream input(&buffer);

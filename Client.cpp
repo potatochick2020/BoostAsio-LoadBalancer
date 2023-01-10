@@ -26,7 +26,7 @@ int main()
         std::cout << "Sent message to server" << std::endl;
         long long int response;
         boost::asio::read(socket, boost::asio::buffer(response));
-        std::cout << "Sent message to server" << std::endl;
+        std::cout << "Receiver message from server"<<response << std::endl;
     } 
 }
 
@@ -55,4 +55,12 @@ int main()
     boost::asio::write(socket, buffer);
     std::cout << "Sent message to server" << std::endl;
   } 
+*/
+
+
+/*
+Validation:
+make sure sent message is an int  
+
+close connection by sending a close signal '\n'
 */
