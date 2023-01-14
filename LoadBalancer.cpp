@@ -12,7 +12,8 @@
 #include <queue>
 #include <thread>
 #include <unordered_map>
-
+#include <boost/functional/hash.hpp>
+  
 void insert_data(std::queue<std::string> &string_queue, std::mutex &string_queue_mutex, bool &end_read, std::queue<std::pair<int, std::vector<int>>> &data_queue, std::mutex &data_queue_mutex)
 {
     while (end_read != true)
@@ -55,7 +56,7 @@ void reader(std::queue<std::string> &string_queue, std::mutex &string_queue_mute
     end_read = true;
 }
 
-void get_worker_workload(boost::asio::ip::tcp::socket socket, const boost::uuids::uuid uuid, std::unordered_map<boost::uuids::uuid, size_t>& uuid2workload, std::mutex& uuid2workload_mutex)
+void get_worker_workload(boost::asio::ip::tcp::socket socket, const boost::uuids::uuid uuid, std::unordered_map<boost::uuids::uuid, size_t, boost::hash<boost::uuids::uuid>>& uuid2workload, std::mutex& uuid2workload_mutex)
 { 
 
     // the worker server will send size of task queue every 1000ms
@@ -82,7 +83,7 @@ void get_worker_workload(boost::asio::ip::tcp::socket socket, const boost::uuids
     }
 }
 
-void find_lowest_workload(boost::uuids::uuid& lowest_workload_uuid, std::mutex& lowest_workload_uuid_mutex,std::unordered_map<boost::uuids::uuid, size_t> uuid2workload,std::mutex& uuid2workload_mutex)
+void find_lowest_workload(boost::uuids::uuid& lowest_workload_uuid, std::mutex& lowest_workload_uuid_mutex,std::unordered_map<boost::uuids::uuid, size_t, boost::hash<boost::uuids::uuid>> uuid2workload,std::mutex& uuid2workload_mutex)
 {
     // find lowest task every 100 ms
     while (true){
@@ -101,7 +102,7 @@ void find_lowest_workload(boost::uuids::uuid& lowest_workload_uuid, std::mutex& 
     }
 }
  
-void send_task_to_lowest_workload_worker(boost::uuids::uuid& lowest_workload_uuid, std::mutex& lowest_workload_uuid_mutexs,std::unordered_map<boost::uuids::uuid, boost::asio::ip::tcp::socket> uuid2socket,std::mutex& uuid2socket_mutex,std::queue<std::pair<int, std::vector<int>>>& data_queue ,std::mutex& data_queue_mutex)
+void send_task_to_lowest_workload_worker(boost::uuids::uuid& lowest_workload_uuid, std::mutex& lowest_workload_uuid_mutex,std::unordered_map<boost::uuids::uuid, boost::asio::ip::tcp::socket, boost::hash<boost::uuids::uuid>>& uuid2socket,std::mutex& uuid2socket_mutex,std::queue<std::pair<int, std::vector<int>>>& data_queue ,std::mutex& data_queue_mutex)
 {
 
     // find lowest task every 100 ms
@@ -116,9 +117,10 @@ void send_task_to_lowest_workload_worker(boost::uuids::uuid& lowest_workload_uui
                 task = data_queue.front().second;
                 data_queue.pop();
             }
-            {
+            { 
                 std::lock_guard<std::mutex> uuid2socket_lock(uuid2socket_mutex);
-                boost::asio::write(uuid2socket[lowest_workload_uuid], boost::asio::buffer(&index,sizeof(int)));
+                boost::asio::ip::tcp::socket socket = std::move(uuid2socket.find(lowest_workload_uuid)->second);
+                boost::asio::write(socket, boost::asio::buffer(&index,sizeof(int)));
             }
             // this thread sleep for 100ms 
         }
@@ -126,7 +128,7 @@ void send_task_to_lowest_workload_worker(boost::uuids::uuid& lowest_workload_uui
 }
 
 // a main port 8820 which listen to worker initial connection, and move to the @get_work_workload function to get workload
-void initial_worker_listener(std::unordered_map<boost::uuids::uuid, size_t>& uuid2workload, std::mutex& uuid2workload_mutex)
+void initial_worker_listener(std::unordered_map<boost::uuids::uuid, size_t, boost::hash<boost::uuids::uuid>>& uuid2workload, std::mutex& uuid2workload_mutex)
 {
     boost::asio::io_context service;
     boost::asio::ip::tcp::acceptor acceptor(service, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), 8820));
@@ -145,7 +147,7 @@ void initial_worker_listener(std::unordered_map<boost::uuids::uuid, size_t>& uui
 }
 
 // a main port 8830 which listen to second worker connection, to send the worker task
-void task_worker_listener(std::unordered_map<boost::uuids::uuid, boost::asio::ip::tcp::socket>& uuid2socket, std::mutex& uuid2socket_mutex)
+void task_worker_listener(std::unordered_map<boost::uuids::uuid, boost::asio::ip::tcp::socket,boost::hash<boost::uuids::uuid>>& uuid2socket, std::mutex& uuid2socket_mutex)
 {
     boost::asio::io_context service;
     boost::asio::ip::tcp::acceptor acceptor(service, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), 8830));
@@ -158,7 +160,7 @@ void task_worker_listener(std::unordered_map<boost::uuids::uuid, boost::asio::ip
         boost::asio::read(socket, boost::asio::buffer(&uuid , sizeof(boost::uuids::uuid)), boost::asio::transfer_exactly(sizeof(boost::uuids::uuid)));
         {
             std::lock_guard<std::mutex> lock(uuid2socket_mutex);
-            uuid2socket[uuid] = std::move(socket);
+            uuid2socket.insert({uuid,std::move(socket)});
         }  
     }
 }
@@ -177,13 +179,13 @@ int main()
         std::queue<std::pair<int, std::vector<int>>> data_queue;
         std::mutex data_queue_mutex;
 
-        std::thread(reader, string_queue, string_queue_mutex, end_read).detach();
+        std::thread(reader, std::ref(string_queue), std::ref(string_queue_mutex), std::ref(end_read)).detach();
 
         // serialize data from string queue to data queue, converting string to int, long long int
         std::vector<std::thread> serialize_threads;
         for (int i = 0; i < processor_count; i++)
         {
-            serialize_threads.push_back(std::thread(insert_data, string_queue, string_queue_mutex, end_read, data_queue, data_queue_mutex));
+            serialize_threads.push_back(std::thread(insert_data, std::ref(string_queue), std::ref(string_queue_mutex), std::ref(end_read), std::ref(data_queue), std::ref(data_queue_mutex)));
         }
 
         for (std::thread &serialize_thread : serialize_threads)
@@ -199,9 +201,9 @@ int main()
     // it will distribute task to the worker
     //  if it is disconnected remove from the uuid2socket map
 
-    std::unordered_map<boost::uuids::uuid, boost::asio::ip::tcp::socket> uuid2socket; // uuid -> {worklistener socket, task data socket}
+    std::unordered_map<boost::uuids::uuid, boost::asio::ip::tcp::socket, boost::hash<boost::uuids::uuid>> uuid2socket; // uuid -> {worklistener socket, task data socket}
     std::mutex uuid2socket_mutex;
-    std::unordered_map<boost::uuids::uuid, size_t> uuid2workload;
+    std::unordered_map<boost::uuids::uuid, size_t, boost::hash<boost::uuids::uuid>> uuid2workload;
     std::mutex uuid2workload_mutex;
 
     boost::uuids::uuid lowest_workload_uuid;

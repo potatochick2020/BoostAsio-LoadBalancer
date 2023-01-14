@@ -3,6 +3,7 @@
 #include <thread>
 #include <unordered_map>
 #include <boost/system/error_code.hpp> 
+
 void hashmap_connection(boost::asio::ip::tcp::socket socket, std::unordered_map<int, long long int>& index2sum , std::mutex& index2sum_mutex)
 {
     // At this point, you can communicate with the client using the socket.
