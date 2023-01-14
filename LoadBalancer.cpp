@@ -3,21 +3,27 @@
 #include <boost/uuid/uuid_generators.hpp> // generators
 #include <boost/uuid/uuid_io.hpp>         // streaming operators etc.
 #include <iostream>
+#include <algorithm>
 #include <thread>
 #include <string>
 #include <fstream>
 #include <vector> 
 #include <queue>
-#include <thread>    
-using namespace boost::asio;
-using namespace boost::asio::ip;
+#include <thread>     
+#include <unordered_map>      
+
 
 void insert_data(std::queue<std::string>& string_queue,std::mutex& string_queue_mutex,bool& end_read, std::queue<std::pair<int,std::vector<int>>>& data_queue,std::mutex& data_queue_mutex)
 {
     while (end_read != true){
+
+        std::string line;
         {
-            std::lock_guard<std::mutex> string_lock(string_queue_mutex);
-            if (!string_queue.empty())std::string line = string_queue.pop();
+            std::lock_guard<std::mutex> string_queue_lock(string_queue_mutex);
+            if (!string_queue.empty()) {
+                line = string_queue.front();
+                string_queue.pop();
+            }
         }
         int index;
         std::stringstream ss;
@@ -30,7 +36,7 @@ void insert_data(std::queue<std::string>& string_queue,std::mutex& string_queue_
             ss>>data[_i];
         }
         const std::lock_guard<std::mutex> data_lock(data_queue_mutex);
-        data_queue.push({index,data[_i]});
+        data_queue.push({index,data});
     }
 }
 
@@ -47,16 +53,8 @@ void reader(std::queue<std::string>& string_queue,std::mutex& string_queue_mutex
 
 
 void get_worker_workload(){
-
-        boost::uuids::uuid uuid = boost::uuids::random_generator()(); 
-        //worker server get its uuid
-        boost::asio::write(socket,boost::asio::buffer(uuid));
-        {
-            std::lock_guard<std::mutex> lock(uuid2socket_mutex);
-            uuid2socket[uuid] = socket;
-        }
         //worker server send a connected flag
-        boost::asio:read(socket,boost::asio::buffer(uuid));
+        boost::asio::read(socket,boost::asio::buffer(uuid));
         
         //the worker server will send size of task queue every 1000ms
         boost::system::error_code ec;
@@ -77,63 +75,95 @@ void get_worker_workload(){
                 break;
             } 
         }
-
 }
+
+void find_lowest_workload(){
+    while (!data_queue.empty()){
+        while (uuid2socket.size()!=0){
+            auto it = std::min_element(uuid2workload.begin(), uuid2workload.end(), [](const auto& l, const auto& r) { return l.second < r.second; });
+            {
+                std::lock_guard<std::mutex> lock(data_queue_mutex);
+                auto task = data_queue.front();
+                data_queue.pop();
+            }
+            boost::asio::write(it->second,task);
+            //distribute task to work server
+        }
+    }
+}
+
+void task_allocator(){
+    //find lowest task every 100 ms 
+
+    
+}
+
+//a main port 8820 which listen to worker initial connection, and move to the @get_work_workload function to get workload 
 void worker_listener(){
-    io_service service; 
-    tcp::acceptor acceptor(service, tcp::endpoint(tcp::v4(), 8830));
+    boost::asio::io_context service; 
+    boost::asio::ip::tcp::acceptor acceptor(service, tcp::endpoint(tcp::v4(), 8820));
 
     while (true)
     { 
-        tcp::socket socket(service); 
+        boost::asio::ip::tcp::socket socket(service); 
         acceptor.accept(socket); 
         
+        boost::uuids::uuid uuid = boost::uuids::random_generator()(); 
+        //worker server get its uuid
+        boost::asio::write(socket,boost::asio::buffer(uuid));
+        {
+            std::lock_guard<std::mutex> lock(uuid2socket_mutex);
+            uuid2socket[uuid] = socket;
+        }
         std::thread(get_worker_workload, std::move(socket)).detach();
         uuid2socket.erase(uuid);
     }
 
 }
+
+//a main port 8830 which listen to second worker connection, to send the worker task
 void task_socket_listener(){
-    io_service service; 
-    tcp::acceptor acceptor(service, tcp::endpoint(tcp::v4(), 8820));
+    boost::asio::io_context service; 
+    boost::asio::ip::tcp::acceptor acceptor(service, tcp::endpoint(tcp::v4(), 8830));
 
     while (true)
     { 
-        tcp::socket socket(service); 
+        boost::asio::ip::tcp::socket socket(service); 
         acceptor.accept(socket); 
         
-        std::thread(get_worker_workload, std::move(socket)).detach();
+        std::thread(task_allocator, std::move(socket)).detach();
         uuid2socket.erase(uuid);
     }
 }
+
 int main()
 {
     const auto processor_count = std::thread::hardware_concurrency(); 
     bool end_read = false;
-
-    //string queue store the unserialize data,
-    std::queue<std::string> string_queue; 
-    std::mutex string_queue_mutex;
-   
+    //scope to deal with data reading from file
+    {
+        //string queue store the unserialize data,
+        std::queue<std::string> string_queue; 
+        std::mutex string_queue_mutex;
     
-    //data queue store the serialize data,
-    std::queue<std::pair<int,std::vector<int>>> data_queue; 
-    std::mutex data_queue_mutex;
+        
+        //data queue store the serialize data,
+        std::queue<std::pair<int,std::vector<int>>> data_queue; 
+        std::mutex data_queue_mutex;
 
-    std::thread reader_thread(reader,string_queue,string_queue_mutex,end_read);
-    reader_thread.join();
-    
-    //serialize data from string queue to data queue, converting string to int, long long int 
-    std::vector<std::thread> serialize_threads;
-    for (int i = 0; i<processor_count-1;i++){
-        serialize_threads.push_back(std::thread(insert_data,string_queue,string_queue_mutex,end_read,data_queue,data_queue_mutex));
-    } 
-    
-    for (std::thread & serialize_thread : serialize_threads)
-    { 
-        if (serialize_thread.joinable()) serialize_thread.join();
-    } 
-
+        std::thread(reader,string_queue,string_queue_mutex,end_read).detach(); 
+        
+        //serialize data from string queue to data queue, converting string to int, long long int 
+        std::vector<std::thread> serialize_threads;
+        for (int i = 0; i<processor_count;i++){
+            serialize_threads.push_back(std::thread(insert_data,string_queue,string_queue_mutex,end_read,data_queue,data_queue_mutex));
+        } 
+        
+        for (std::thread & serialize_thread : serialize_threads)
+        { 
+            if (serialize_thread.joinable()) serialize_thread.join();
+        } 
+    }
     //one thread to open a port for receiving worker connection, open new thread once accept new connection
     //one thread to keep asking number of task for each worker every 1 second; (store in a min heap sorted by number of task and corresponding port/index in the port vector)
 
@@ -141,31 +171,25 @@ int main()
         //it will distribute task to the worker 
             // if it is disconnected remove from the uuid2socket map
     
-
-    unordered_map<boost::uuids::uuid,tcp::socket> uuid2socket; // uuid -> {worklistener socket, task data socket}
+    std::unordered_map<boost::uuids::uuid,boost::asio::ip::tcp::socket> uuid2socket; // uuid -> {worklistener socket, task data socket}
     std::mutex uuid2socket_mutex;
-    map<boost::uuids::uuid,int> uuid2workload; 
+    std::unordered_map<boost::uuids::uuid,int> uuid2workload; 
     std::mutex uuid2workload_mutex;
     
+    boost::uuids::uuid lowest_workload_uuid;
+    std::mutex lowest_workload_uuid_mutex;
+    
     ///  TODO: add the 2 global socket here
-    worker_listener(uuid2socket,uuid2socket_mutex,lowest_workload_worker_heap,lowest_workload_worker_heap_mutex);
-
-
-    task_allocator(uuid2socket,uuid2socket_mutex,lowest_workload_worker_heap,lowest_workload_worker_heap_mutex);
-    //find lowest task every 100 ms 
-
-    while (!data_queue.empty()){
-        while (uuid2socket.size()!=0){
-            auto it = min_element(uuid2workload.begin(), uuid2workload.end(), [](const auto& l, const auto& r) { return l.second < r.second; });
-            {
-                std::lock_guard<std::mutex> lock(data_queue_mutex);
-                auto task = data_queue.top();
-                data_queue.pop();
-            }
-            boost::asio::write(it->second,task);
-            //distribute task to work server
-        }
-    }
+    
+    //receive initial connection and get workload
+    std::thread(std::ref(uuid2socket),std::ref(uuid2socket_mutex)).detach();
+    //find lowest task every 100ms
+    // parameter need map
+    
+    std::thread(std::ref()).detach();
+    //find lowest 
+    std::thread().detach();
+    
 
     //send end signal to every socket in the map
     for (auto worker : uuid2socket){
@@ -174,3 +198,7 @@ int main()
     ///  TODO: close the 2 global socket here
     return 0;
 }
+
+
+
+//why need push socket to map? need to send the task back

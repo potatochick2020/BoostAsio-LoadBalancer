@@ -10,13 +10,15 @@ set(CMAKE_CXX_COMPILER /usr/bin/clang++)
 
 # Add the source files
 add_executable(Client Client.cpp) 
-add_executable(LoadBalancer LoadBalancer.cpp) 
 add_executable(MainServer MainServer.cpp) 
 add_executable(Worker_Server Worker_Server.cpp) 
+add_executable(LoadBalancer LoadBalancer.cpp) 
 
-find_package(Boost REQUIRED) 
+add_library(Boost INTERFACE)
+target_include_directories(Boost INTERFACE /usr/local/include/)
+
 # Link the sqlite3 and benchmark library
-target_link_libraries(Client Boost::asio)
-target_link_libraries(LoadBalancer Boost::asio)
-target_link_libraries(MainServer Boost::asio)
-target_link_libraries(Worker_Server Boost::asio)
+target_link_libraries(Client Boost)
+target_link_libraries(LoadBalancer Boost)
+target_link_libraries(MainServer Boost)
+target_link_libraries(Worker_Server Boost)
