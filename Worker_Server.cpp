@@ -31,7 +31,7 @@ void connect_loadbalancer(std::queue<std::pair<int,std::vector<int>>>& task_queu
     }   
     bool received_all_task_flag = true; 
     while (received_all_task_flag == false){ 
-        //sleep for 1000 ms
+        //sleep for 100 ms
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         //send queue size to port 8820
         size_t task_queue_size;
@@ -63,7 +63,7 @@ int main()
     boost::asio::read(hashmap_socket,boost::asio::buffer(uuid));
     //3. initiate the connection to task_distributer port of the loadbalancer
     //4. receive task and put into the task queue
-    std::thread(connect_loadbalancer,task_queue,task_queue_mutex).detach();
+    std::thread(connect_loadbalancer,std::ref(task_queue),std::ref(task_queue_mutex)).detach();
 
     //while not receive all 
     while(!received_all_task_flag){
@@ -87,32 +87,5 @@ int main()
     /// TODO: close the connection to mainserver
     //one thread for listen to the loadbalancer and store in task queue
     //another thread for summing and send it to the mainserver.cpp  
-}
-
-/*
-  io_service service;
-
-  // Create a socket and connect it to the server
-  tcp::socket socket(service);
-  socket.connect(tcp::endpoint(address::from_string("127.0.0.1"), 1234));
-
-  // At this point, you can communicate with the server using the socket.
-  std::cout << "Connected to server at " << socket.remote_endpoint() << std::endl;
-
-  // You can also use the socket to send and receive data to/from the server.
-  // For example:
-  while (true){
-    std::string mes; std::cin>>mes;
-    std::cout<<mes;
-    if (mes == "close"){
-        socket.close();
-        break;
-    } 
-    boost::asio::streambuf buffer;
-    std::ostream output(&buffer);
-    output << mes << "\r\n";
-    boost::asio::write(socket, buffer);
-    std::cout << "Sent message to server" << std::endl;
-  } 
-  */
+} 
  
