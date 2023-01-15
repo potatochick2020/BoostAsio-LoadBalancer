@@ -7,14 +7,9 @@ def generate_data():
 
 def generate_datasheet(filename):
     with open(filename, "w") as f:
-        for _ in range(1000):
+        for _ in range(500000):
             f.write(generate_data() + '\n')
 
-i = 1
-while True:
-    filename = f"datasheet-{i}.txt"
-    try:
-        generate_datasheet(filename)
-        break
-    except FileExistsError:
-        i += 1
+ 
+ 
+generate_datasheet("datasheet-1.txt")

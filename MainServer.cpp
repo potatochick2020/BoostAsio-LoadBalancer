@@ -21,7 +21,7 @@ void hashmap_connection(boost::asio::ip::tcp::socket socket, std::unordered_map<
         long long int sum;
         boost::asio::read(socket, boost::asio::buffer(&index , sizeof(int)), boost::asio::transfer_exactly(sizeof(int)),ec_index);
         boost::asio::read(socket, boost::asio::buffer(&sum , sizeof(long long int)), boost::asio::transfer_exactly(sizeof(long long int)),ec_sum);
-        
+        std::cout<<"received from worker, index : "<<index<<" , sum : "<<sum<<std::endl;
         if (!ec_index && !ec_sum)
         {  
             // reply with the corresponding image in the hashmap

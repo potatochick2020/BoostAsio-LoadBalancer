@@ -17,8 +17,7 @@
 void insert_data(std::queue<std::string> &string_queue, std::mutex &string_queue_mutex, std::atomic<bool> &end_read, std::queue<std::pair<int, std::vector<int>>> &data_queue, std::mutex &data_queue_mutex)
 {
     {
-        std::lock_guard<std::mutex> l(string_queue_mutex);
-        std::cout<<"string_queue.size()"<<string_queue.size()<<" "<<end_read <<std::endl;
+        std::lock_guard<std::mutex> l(string_queue_mutex); 
 
     }
     std::atomic<bool> end_string_queue = false;
@@ -48,30 +47,26 @@ void insert_data(std::queue<std::string> &string_queue, std::mutex &string_queue
         }
         {
             std::lock_guard<std::mutex> data_queue_lock(data_queue_mutex);
-            data_queue.push({index, data});
-            std::cout<<"data_queue.size() : "<<data_queue.size() <<" ,index : "<<index<<" , vc size :"<<data.size()<<std::endl;
+            data_queue.push({index, data}); 
         }
         
     }
     {
-            std::lock_guard<std::mutex> data_queue_lock(data_queue_mutex); 
-            std::cout<<"data_queue.size() : "<<data_queue.size()<<std::endl;
+            std::lock_guard<std::mutex> data_queue_lock(data_queue_mutex);  
     }
 }
 
 void reader(std::queue<std::string> &string_queue, std::mutex &string_queue_mutex, std::atomic<bool> &end_read)
 {
-    std::ifstream file("datasheet-1.txt");
+    std::ifstream file("../datasheet-1.txt");
     std::string line;
     while (std::getline(file, line))
     {  
         std::lock_guard<std::mutex> string_lock(string_queue_mutex);
-        string_queue.push(line); 
-        std::cout<<"string_queue.size() : "<<string_queue.size()<<std::endl;
+        string_queue.push(line);  
     }
     file.close();
-    end_read = true;
-    std::this_thread::sleep_for(std::chrono::milliseconds(100)); 
+    end_read = true; 
 }
 
 void get_worker_workload(boost::asio::ip::tcp::socket socket, const boost::uuids::uuid uuid, std::unordered_map<boost::uuids::uuid, size_t, boost::hash<boost::uuids::uuid>>& uuid2workload, std::mutex& uuid2workload_mutex)
@@ -115,9 +110,7 @@ void find_lowest_workload(boost::uuids::uuid& lowest_workload_uuid, std::mutex& 
                                        
             std::lock_guard<std::mutex> lowest_workload_uuid_lock(lowest_workload_uuid_mutex);          
             lowest_workload_uuid = it->first;
-        }
-        // this thread sleep for 100ms
-        std::this_thread::sleep_for(std::chrono::milliseconds(100)); 
+        } 
     }
 }
  
@@ -131,7 +124,7 @@ void send_task_to_lowest_workload_worker(boost::uuids::uuid& lowest_workload_uui
         { 
             int index;
             std::vector<int> task; 
-            { 
+            {
                 index = data_queue.front().first;
                 task = data_queue.front().second;
                 data_queue.pop();
@@ -139,14 +132,13 @@ void send_task_to_lowest_workload_worker(boost::uuids::uuid& lowest_workload_uui
             { 
                 std::lock_guard<std::mutex> lowest_workload_uuid_lock(lowest_workload_uuid_mutex);
                 std::lock_guard<std::mutex> uuid2socket_lock(uuid2socket_mutex); 
-                std::cout<<"start send index and task , uuid2socket size "<<uuid2socket.size() <<std::endl;
+                std::cout<<"start send index and task , uuid2socket size "<<uuid2socket.size() <<" "<<lowest_workload_uuid<<std::endl;
                 std::cout<<"start index"<<index<<std::endl;
                 boost::asio::write(*uuid2socket[lowest_workload_uuid], boost::asio::buffer(&index,sizeof(int)));
-                std::cout<<"start task "<<task.size()<<std::endl;
-                boost::asio::write(*uuid2socket[lowest_workload_uuid], boost::asio::buffer(&task,sizeof(std::vector<int>(1000))));
+                std::cout<<"start task "<<task.size() << " "<<task[0]<< " "<<task[1]<< " "<<task[2]<<std::endl;
+                boost::asio::write(*uuid2socket[lowest_workload_uuid], boost::asio::buffer(task));
                  
-            }
-            // this thread sleep for 100ms 
+            } 
         }
     }
 }
