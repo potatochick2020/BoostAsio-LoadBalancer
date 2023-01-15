@@ -127,7 +127,7 @@ void send_task_to_lowest_workload_worker(boost::uuids::uuid& lowest_workload_uui
     // find lowest task every 100 ms
     while (true){ 
         std::lock_guard<std::mutex> data_queue_lock(data_queue_mutex); 
-        while (data_queue.size() != 0)
+        if (data_queue.size() != 0)
         { 
             int index;
             std::vector<int> task; 
@@ -265,7 +265,9 @@ int main()
         std::lock_guard<std::mutex> data_queue_lock(data_queue_mutex);
         std::cout<<"4 "<<lowest_workload_uuid<<" dq.size : "<<data_queue.size()<<std::endl;
     }
-    std::thread(send_task_to_lowest_workload_worker,std::ref(lowest_workload_uuid), std::ref(lowest_workload_uuid_mutex),std::ref(uuid2socket),std::ref(uuid2socket_mutex),std::ref(data_queue) ,std::ref(data_queue_mutex)).detach();
+    
+    std::thread send_task_to_lowest_workload_worker_thread(send_task_to_lowest_workload_worker,std::ref(lowest_workload_uuid), std::ref(lowest_workload_uuid_mutex),std::ref(uuid2socket),std::ref(uuid2socket_mutex),std::ref(data_queue) ,std::ref(data_queue_mutex));
+    if (send_task_to_lowest_workload_worker_thread.joinable()) send_task_to_lowest_workload_worker_thread.join();
     std::this_thread::sleep_for(std::chrono::milliseconds(5000)); 
     std::cout<<"5"<<std::endl;
     ///  TODO: close the 2 global socket here
