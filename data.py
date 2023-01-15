@@ -7,7 +7,7 @@ def generate_data():
 
 def generate_datasheet(filename):
     with open(filename, "w") as f:
-        for _ in range(100000):
+        for _ in range(1000):
             f.write(generate_data() + '\n')
 
 i = 1

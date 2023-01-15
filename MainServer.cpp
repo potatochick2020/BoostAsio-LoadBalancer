@@ -2,7 +2,7 @@
 #include <iostream>
 #include <thread>
 #include <unordered_map>
-#include <boost/system/error_code.hpp> 
+#include <boost/system/error_code.hpp>  
 
 void hashmap_connection(boost::asio::ip::tcp::socket socket, std::unordered_map<int, long long int>& index2sum , std::mutex& index2sum_mutex)
 {
@@ -45,11 +45,9 @@ void hashmap_connection(boost::asio::ip::tcp::socket socket, std::unordered_map<
     }
 }
 
-void hashmap_server()
+void hashmap_server(std::unordered_map<int, long long int>& index2sum , std::mutex& index2sum_mutex)
 {
-    boost::system::error_code ec;
-    std::unordered_map<int, long long int> index2sum;
-    std::mutex index2sum_mutex;
+    boost::system::error_code ec; 
     // open port for write in data to std::unordered_map index2sum
  
     boost::asio::io_service service;
@@ -72,22 +70,21 @@ void hashmap_server()
 }
 
 // A function to handle a single connection
-void query_connection(boost::asio::ip::tcp::socket socket)
+void query_connection(boost::asio::ip::tcp::socket socket, std::unordered_map<int, long long int>& index2sum , std::mutex& index2sum_mutex)
 { 
     std::cout << "Received connection from " << socket.remote_endpoint() << std::endl;
  
     boost::system::error_code ec;
     while (true)
-    {
-        boost::asio::streambuf buffer;
-        size_t s = boost::asio::read_until(socket, buffer, "close", ec);
+    { 
+        int index;
+        boost::asio::read(socket, boost::asio::buffer(&index,sizeof(int)),boost::asio::transfer_exactly(sizeof(int)), ec);
         if (!ec)
-        {
-            std::istream input(&buffer);
-            std::string message;
-            std::getline(input, message);
-            std::cout << "Received message: " << message << std::endl; 
-            /// TODO: reply with value in hashmap
+        { 
+            std::cout << "Received message: " << index << std::endl; 
+
+            long long int reply = index2sum[index];   
+            boost::asio::write(socket, boost::asio::buffer(&reply,sizeof(long long int)));
         }
         else if (ec == boost::asio::error::eof)
         {
@@ -97,7 +94,7 @@ void query_connection(boost::asio::ip::tcp::socket socket)
     }
 }
 
-void query_server()
+void query_server(std::unordered_map<int, long long int>& index2sum , std::mutex& index2sum_mutex)
 {
     boost::asio::io_service service; 
     boost::asio::ip::tcp::acceptor acceptor(service, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), 3320));
@@ -106,15 +103,19 @@ void query_server()
     { 
         boost::asio::ip::tcp::socket socket(service); 
         acceptor.accept(socket); 
-        std::thread(query_connection, std::move(socket)).detach();
+        std::thread(query_connection, std::move(socket),std::ref(index2sum),std::ref(index2sum_mutex)).detach();
     }
 }
 
 int main()
-{
-    std::thread query_server_thread(query_server);
-    std::thread hashmap_server_thread(hashmap_server);
+{ 
+    std::unordered_map<int,long long int> index2sum;
+    std::mutex index2sum_mutex;
+
     std::cout << "Server started"<<std::endl;
+    std::thread query_server_thread(query_server,std::ref(index2sum),std::ref(index2sum_mutex));
+    std::thread hashmap_server_thread(hashmap_server,std::ref(index2sum),std::ref(index2sum_mutex));
+    
     query_server_thread.join();
     hashmap_server_thread.join();
 
